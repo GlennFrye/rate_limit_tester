@@ -10,43 +10,31 @@ import threading
 import pprint
 import requests
 
-FINAL_REQUEST_COUNT = 0
-
-UNEXPECTED_RESP_CODE_RECEIVED = False
-UNEXPECTED_RESP_CODE_LOCK = threading.Lock()
-
-RESP_CODE_TRACKER = dict()
-TRACKER_LOCK = threading.Lock()
+# track the set of response codes received over the course of testing
+RESP_CODES_SET = set()
+# a list of all response codes received, for the post-test summary
+RESP_CODE_LIST = list()
 
 
 def do_request(url: str):
     """
     Sends an HTTP request and tracks the response code.
+    Note: Tracking both the set of response codes received and the list of response codes allows
+          for thread-safe operations and preserves performance by avoiding the usage of locks.
+          There may be a more concise way of doing this.
     """
-    global FINAL_REQUEST_COUNT
-    global UNEXPECTED_RESP_CODE_RECEIVED
-    global RESP_CODE_TRACKER
 
     # TODO - default to HEAD request to alleviate overhead of large responses; make it configurable
     resp = requests.get(url)
 
     # TODO - let expected response code be configurable
-    if resp.status_code == 200:
+    if resp.status_code == 200 or resp.status_code == 204:
         print(".", end='')
     else:
         print("!", end='')
-        with UNEXPECTED_RESP_CODE_LOCK:
-            if not UNEXPECTED_RESP_CODE_RECEIVED:
-                print(resp.status_code)
-                UNEXPECTED_RESP_CODE_RECEIVED = True
 
-    with TRACKER_LOCK:
-        if resp.status_code in RESP_CODE_TRACKER:
-            RESP_CODE_TRACKER[resp.status_code] += 1
-        else:
-            RESP_CODE_TRACKER[resp.status_code] = 1
-
-    FINAL_REQUEST_COUNT += 1  # increments are thread-safe
+    RESP_CODES_SET.add(resp.status_code)
+    RESP_CODE_LIST.append(resp.status_code)
 
 
 def test_rate_limit(url: str, tries: int):
@@ -59,7 +47,12 @@ def test_rate_limit(url: str, tries: int):
     for thread in threads:
         thread.join()
 
-    print()
+
+def create_summary() -> dict:
+    resp_code_summary = dict()
+    for code in RESP_CODES_SET:
+        resp_code_summary[code] = RESP_CODE_LIST.count(code)
+    return resp_code_summary
 
 
 def configure_args() -> argparse.ArgumentParser:
@@ -115,8 +108,7 @@ def validate_args(args: dict) -> dict:
 
 def main(url: str, attempts: int, batch_size: int) -> None:
     print("\n"
-          "Note: '.'=200 response, and '!'=non-200 response.\n"
-          "      The script will print the response code of the first non-200 response.\n")
+          "Note: '.' = 200/204 response, and '!' = all other response codes.\n")
     print(f"number of requests to generate: {attempts}")
     print(f"target: {url}\n")
 
@@ -124,14 +116,17 @@ def main(url: str, attempts: int, batch_size: int) -> None:
 
     for _ in range(0, loops):
         test_rate_limit(url, batch_size)
+        print()
+
+    test_summary = create_summary()
 
     print("\n"
-          "Done\n"
-          f"    initial number of requests configured: {attempts}\n"
-          f"    total number of requests generated: {FINAL_REQUEST_COUNT}\n"
+          "Done:\n"
+          f"    * initial number of requests configured: {attempts}\n"
+          f"    * total number of requests generated: {len(RESP_CODE_LIST)}\n"
           "\n"
-          "Request breakdown:")
-    pprint.PrettyPrinter(indent=4).pprint(RESP_CODE_TRACKER)
+          "Response code frequencies:")
+    pprint.PrettyPrinter(indent=4).pprint(test_summary)
 
 
 if __name__ == '__main__':

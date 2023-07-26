@@ -1,5 +1,5 @@
 # rate_limit_tester
-A simple tool to test rate limiting on your web application firewall.
+A simple tool to test rate limiting of a WAF (web application firewall).
 
 Feedback and pull requests are always welcomed!
 
@@ -30,3 +30,8 @@ executable so folks aren't forced to install Python, perhaps using [PyInstaller]
 
 ## License
 See LICENSE file.
+
+## Author
+Glenn Frye - I enjoy being at the intersection of security and engineering :-)
+
+Feel free to reach out to me via [LinkedIn](https://www.linkedin.com/in/glenn-frye-28740b34/) or [email](mailto:glennfrye14@gmail.com).
